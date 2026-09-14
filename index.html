@@ -145,7 +145,10 @@
       margin-top:10px; display:block; object-fit:contain;
     }
     .playhint { font-size:11px; color:var(--blue); font-weight:650; margin-top:6px; letter-spacing:.02em; }
+    .err { color:#9B2C2C; font-size:13px; margin:8px 0 12px; min-height:18px; }
+    .ghost { background:transparent; color:var(--blue2); border:1px solid var(--line); margin-top:8px; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="shell">
@@ -161,14 +164,41 @@
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
+    const SUPABASE_URL = 'https://efmpsyvxzbkmwsypzbqs.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbXBzeXZ4emJrbXdzeXB6YnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTc2NzcsImV4cCI6MjEwMzI3MzY3N30.rDSquDFs-mMZT6XtBTtTrwJFe4t4hHORgDuwr_4xQzE';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    let user = null;
+    let authMode = 'signin';
+    let authMsg = '';
     const db = JSON.parse(localStorage.getItem('km') || '{}');
-    const save = () => localStorage.setItem('km', JSON.stringify(db));
+    const saveLocal = () => localStorage.setItem('km', JSON.stringify(db));
+    const save = () => {
+      saveLocal();
+      if (user) {
+        supabase.from('km_state').upsert({
+          user_id: user.id,
+          data: db,
+          updated_at: new Date().toISOString()
+        }).then(({ error }) => { if (error) console.warn(error.message); });
+      }
+    };
     if (!db.proteinTarget) db.proteinTarget = 150;
     if (!db.protein) db.protein = [];
     if (!db.doses) db.doses = [];
     if (!db.weights) db.weights = [];
     if (!db.checkins) db.checkins = [];
     if (!db.doneSets) db.doneSets = {};
+    const applyCloud = (data) => {
+      if (!data || typeof data !== 'object') return;
+      Object.assign(db, data);
+      if (!db.proteinTarget) db.proteinTarget = 150;
+      if (!db.protein) db.protein = [];
+      if (!db.doses) db.doses = [];
+      if (!db.weights) db.weights = [];
+      if (!db.checkins) db.checkins = [];
+      if (!db.doneSets) db.doneSets = {};
+      saveLocal();
+    };
 
     const today = () => new Date().toISOString().slice(0,10);
     const niceDate = (d) => new Date(d+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric'});
@@ -226,9 +256,15 @@
       appetite:'Schedule protein first. Use a shake if needed. Do not wait for hunger.'
     };
 
-    let screen = db.onboarded ? 'home' : 'onboard';
+    let screen = 'auth';
     let step = 0;
     const go = (s) => { screen=s; render(); };
+    const afterLogin = async () => {
+      const { data } = await supabase.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
+      if (data && data.data) applyCloud(data.data);
+      else save();
+      go(db.onboarded ? 'home' : 'onboard');
+    };
     $('nav').addEventListener('click', e => {
       const b = e.target.closest('button'); if (b) go(b.dataset.go);
     });
@@ -238,13 +274,42 @@
       const h = new Date().getHours();
       return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
     };
-    const legal = `<p class="legal">Keep Muscle by Prime Vitality is for educational and tracking purposes only. It is not medical advice. Consult your physician before starting exercise or nutrition while using GLP-1 medications.</p>`;
+    const legal = `<p class="legal">Keep Muscle by Prime Vitality is for educational and tracking purposes only. It is not medical advice. Consult your physician before starting exercise or nutrition while using GLP-1 medications.<br><a class="ext" href="privacy.html">Privacy Policy</a></p>`;
 
     function render(){
       const nav = $('nav');
-      nav.className = (screen==='onboard') ? 'hidden' : '';
+      nav.className = (screen==='onboard' || screen==='auth') ? 'hidden' : '';
       [...nav.querySelectorAll('button')].forEach(b => b.classList.toggle('on', b.dataset.go===screen));
       const el = $('app');
+
+      if (screen==='auth') {
+        el.innerHTML = brand + `
+          <h1>${authMode==='signin' ? 'Sign in' : 'Create account'}</h1>
+          <p class="lede">Save dose, protein, workouts, and check-ins to your account so they follow you on any phone.</p>
+          <div class="label">Email</div>
+          <input id="em" type="email" autocomplete="email" placeholder="you@email.com" />
+          <div class="label">Password</div>
+          <input id="pw" type="password" autocomplete="${authMode==='signin'?'current-password':'new-password'}" placeholder="At least 6 characters" />
+          <div class="err" id="autherr">${authMsg}</div>
+          <button id="goauth">${authMode==='signin'?'Sign in':'Create account'}</button>
+          <button class="ghost" id="swap">${authMode==='signin'?'Need an account? Create one':'Already have an account? Sign in'}</button>
+          ${legal}`;
+        $('swap').onclick = () => { authMode = authMode==='signin'?'signup':'signin'; authMsg=''; render(); };
+        $('goauth').onclick = async () => {
+          const email = $('em').value.trim();
+          const password = $('pw').value;
+          authMsg = '';
+          if (!email || !password) { authMsg = 'Enter email and password.'; render(); return; }
+          $('goauth').textContent = 'Working…';
+          const fn = authMode==='signin' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
+          const { data, error } = await fn({ email, password });
+          if (error) { authMsg = error.message; render(); return; }
+          user = data.user || (data.session && data.session.user);
+          if (!user) { authMsg = 'Check your email if confirmation is required, then sign in.'; render(); return; }
+          await afterLogin();
+        };
+        return;
+      }
 
       if (screen==='onboard') {
         const fields = [
@@ -429,10 +494,27 @@
             <div class="label">How they fit together</div>
             <div class="mini">1. Use the website calculator to set calories and macros.<br>2. Use Keep Muscle to hit protein, train 4 days, and track your dose.<br>3. Use the book when you want the full system and food lists.</div>
           </div>
+          <div class="card">
+            <div class="label">Account</div>
+            <div class="value" style="font-size:16px">${user && user.email ? user.email : 'Signed in'}</div>
+            <div class="mini">Logs save to the cloud while you are signed in.</div>
+            <button id="signout" class="ghost">Sign out</button>
+          </div>
           ${legal}`;
+        const so = $('signout');
+        if (so) so.onclick = async () => {
+          await supabase.auth.signOut();
+          user = null;
+          go('auth');
+        };
       }
     }
-    render();
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      user = session && session.user;
+      if (user) await afterLogin();
+      else { screen = 'auth'; render(); }
+    })();
   </script>
 </body>
 </html>
