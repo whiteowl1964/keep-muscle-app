@@ -300,13 +300,30 @@
           const password = $('pw').value;
           authMsg = '';
           if (!email || !password) { authMsg = 'Enter email and password.'; render(); return; }
+          if (password.length < 6) { authMsg = 'Password must be at least 6 characters.'; render(); return; }
           $('goauth').textContent = 'Working…';
-          const fn = authMode==='signin' ? sb.auth.signInWithPassword : sb.auth.signUp;
-          const { data, error } = await fn({ email, password });
-          if (error) { authMsg = error.message; render(); return; }
-          user = data.user || (data.session && data.session.user);
-          if (!user) { authMsg = 'Check your email if confirmation is required, then sign in.'; render(); return; }
-          await afterLogin();
+          try {
+            const op = authMode==='signin'
+              ? sb.auth.signInWithPassword({ email, password })
+              : sb.auth.signUp({ email, password });
+            const timed = Promise.race([
+              op,
+              new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out. In Supabase turn Confirm Sign Up off, then try again.')), 12000))
+            ]);
+            const { data, error } = await timed;
+            if (error) { authMsg = error.message; render(); return; }
+            user = (data && data.user) || (data && data.session && data.session.user);
+            if (!user) {
+              authMsg = 'Account may be created. Tap Already have an account? Sign in.';
+              authMode = 'signin';
+              render();
+              return;
+            }
+            await afterLogin();
+          } catch (e) {
+            authMsg = (e && e.message) ? e.message : 'Could not reach the account server.';
+            render();
+          }
         };
         return;
       }
