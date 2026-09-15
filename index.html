@@ -164,6 +164,7 @@
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
+    const PAY_LINK = 'https://buy.stripe.com/test_bJe6oBd0Z1Z8fJOaqJ8g000';
     const SUPABASE_URL = 'https://efmpsyvxzbkmwsypzbqs.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbXBzeXZ4emJrbXdzeXB6YnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTc2NzcsImV4cCI6MjEwMzI3MzY3N30.rDSquDFs-mMZT6XtBTtTrwJFe4t4hHORgDuwr_4xQzE';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -188,6 +189,7 @@
     if (!db.weights) db.weights = [];
     if (!db.checkins) db.checkins = [];
     if (!db.doneSets) db.doneSets = {};
+    if (typeof db.paid !== 'boolean') db.paid = false;
     const applyCloud = (data) => {
       if (!data || typeof data !== 'object') return;
       Object.assign(db, data);
@@ -197,6 +199,7 @@
       if (!db.weights) db.weights = [];
       if (!db.checkins) db.checkins = [];
       if (!db.doneSets) db.doneSets = {};
+      if (typeof db.paid !== 'boolean') db.paid = false;
       saveLocal();
     };
 
@@ -262,7 +265,11 @@
     const afterLogin = async () => {
       const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
       if (data && data.data) applyCloud(data.data);
-      else save();
+      if (new URLSearchParams(location.search).get('paid') === '1') {
+        db.paid = true;
+        if (history.replaceState) history.replaceState({}, '', location.pathname);
+      }
+      save();
       go(db.onboarded ? 'home' : 'onboard');
     };
     $('nav').addEventListener('click', e => {
@@ -512,12 +519,25 @@
             <div class="mini">1. Use the website calculator to set calories and macros.<br>2. Use Keep Muscle to hit protein, train 4 days, and track your dose.<br>3. Use the book when you want the full system and food lists.</div>
           </div>
           <div class="card">
+            <div class="label">Membership</div>
+            <div class="value" style="font-size:17px">${db.paid ? 'Active' : 'Keep Muscle — $9 / month'}</div>
+            <div class="mini">${db.paid ? 'Cloud save and workout videos are included.' : 'Test checkout only. Use Stripe test card 4242 4242 4242 4242.'}</div>
+            ${db.paid ? '' : '<button id="upgrade" style="margin-top:12px">Upgrade</button><button id="markpaid" class="ghost">I finished the test checkout</button>'}
+          </div>
+          <div class="card">
             <div class="label">Account</div>
             <div class="value" style="font-size:16px">${user && user.email ? user.email : 'Signed in'}</div>
             <div class="mini">Logs save to the cloud while you are signed in.</div>
             <button id="signout" class="ghost">Sign out</button>
           </div>
           ${legal}`;
+        const up = $('upgrade');
+        if (up) up.onclick = () => {
+          const email = user && user.email ? encodeURIComponent(user.email) : '';
+          location.href = PAY_LINK + (email ? ('?prefilled_email=' + email) : '');
+        };
+        const mp = $('markpaid');
+        if (mp) mp.onclick = () => { db.paid = true; save(); render(); };
         const so = $('signout');
         if (so) so.onclick = async () => {
           await sb.auth.signOut();
