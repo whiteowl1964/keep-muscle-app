@@ -171,6 +171,29 @@
     let user = null;
     let authMode = 'signin';
     let authMsg = '';
+    let payMsg = '';
+    const payUrl = () => {
+      const q = [];
+      if (user && user.id) q.push('client_reference_id=' + encodeURIComponent(user.id));
+      if (user && user.email) q.push('prefilled_email=' + encodeURIComponent(user.email));
+      return PAY_LINK + (q.length ? ('?' + q.join('&')) : '');
+    };
+    const checkPaid = async () => {
+      if (!user) { payMsg = 'Sign in first.'; render(); return; }
+      payMsg = 'Checking Stripe…';
+      render();
+      const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
+      if (data && data.data && data.data.paid) {
+        applyCloud(data.data);
+        db.paid = true;
+        saveLocal();
+        payMsg = '';
+        go('home');
+        return;
+      }
+      payMsg = 'Payment not found yet. Wait 15 seconds after Stripe says paid, then tap Check payment again.';
+      render();
+    };
     const db = JSON.parse(localStorage.getItem('km') || '{}');
     const saveLocal = () => localStorage.setItem('km', JSON.stringify(db));
     const save = () => {
@@ -382,16 +405,14 @@
             <div class="mini">Billed by Stripe to Prime Vitality LLC. Cancel anytime in your Stripe receipt email.</div>
           </div>
           <button id="upgrade">Subscribe — $9 / month</button>
-          <button class="ghost" id="markpaid">I finished checkout</button>
+          <button class="ghost" id="checkpaid">I paid — check status</button>
+          <div class="err">${payMsg}</div>
           <button class="ghost" id="signout">Sign out</button>
           ${legal}`;
         const up = $('upgrade');
-        if (up) up.onclick = () => {
-          const email = user && user.email ? encodeURIComponent(user.email) : '';
-          location.href = PAY_LINK + (email ? ('?prefilled_email=' + email) : '');
-        };
-        const mp = $('markpaid');
-        if (mp) mp.onclick = () => { db.paid = true; save(); go('home'); };
+        if (up) up.onclick = () => { location.href = payUrl(); };
+        const cp = $('checkpaid');
+        if (cp) cp.onclick = () => checkPaid();
         const so = $('signout');
         if (so) so.onclick = async () => {
           await sb.auth.signOut();
@@ -564,8 +585,8 @@
           <div class="card">
             <div class="label">Membership</div>
             <div class="value" style="font-size:17px">${db.paid ? 'Active' : 'Keep Muscle — $9 / month'}</div>
-            <div class="mini">${db.paid ? 'Cloud save and workout videos are included.' : 'Subscribe for $9 per month. After Stripe confirms payment, return here and tap I finished checkout.'}</div>
-            ${db.paid ? '' : '<button id="upgrade" style="margin-top:12px">Upgrade</button><button id="markpaid" class="ghost">I finished checkout</button>'}
+            <div class="mini">${db.paid ? 'Cloud save and workout videos are included.' : 'Subscribe for $9 per month. After Stripe confirms payment, return here and tap I paid — check status.'}</div>
+            ${db.paid ? '' : '<button id="upgrade" style="margin-top:12px">Upgrade</button><button id="checkpaid" class="ghost">I paid — check status</button>'}
           </div>
           <div class="card">
             <div class="label">Account</div>
@@ -575,12 +596,9 @@
           </div>
           ${legal}`;
         const up = $('upgrade');
-        if (up) up.onclick = () => {
-          const email = user && user.email ? encodeURIComponent(user.email) : '';
-          location.href = PAY_LINK + (email ? ('?prefilled_email=' + email) : '');
-        };
-        const mp = $('markpaid');
-        if (mp) mp.onclick = () => { db.paid = true; save(); render(); };
+        if (up) up.onclick = () => { location.href = payUrl(); };
+        const cp = $('checkpaid');
+        if (cp) cp.onclick = () => checkPaid();
         const so = $('signout');
         if (so) so.onclick = async () => {
           await sb.auth.signOut();
