@@ -265,6 +265,7 @@
     const afterLogin = async () => {
       const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
       if (data && data.data) applyCloud(data.data);
+      else db.paid = false;
       if (new URLSearchParams(location.search).get('paid') === '1') {
         db.paid = true;
         if (history.replaceState) history.replaceState({}, '', location.pathname);
@@ -542,6 +543,8 @@
         if (so) so.onclick = async () => {
           await sb.auth.signOut();
           user = null;
+          db.paid = false;
+          saveLocal();
           go('auth');
         };
       }
