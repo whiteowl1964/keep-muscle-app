@@ -166,7 +166,7 @@
     const $ = (id) => document.getElementById(id);
     const SUPABASE_URL = 'https://efmpsyvxzbkmwsypzbqs.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbXBzeXZ4emJrbXdzeXB6YnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTc2NzcsImV4cCI6MjEwMzI3MzY3N30.rDSquDFs-mMZT6XtBTtTrwJFe4t4hHORgDuwr_4xQzE';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
     let user = null;
     let authMode = 'signin';
     let authMsg = '';
@@ -175,7 +175,7 @@
     const save = () => {
       saveLocal();
       if (user) {
-        supabase.from('km_state').upsert({
+        sb.from('km_state').upsert({
           user_id: user.id,
           data: db,
           updated_at: new Date().toISOString()
@@ -260,7 +260,7 @@
     let step = 0;
     const go = (s) => { screen=s; render(); };
     const afterLogin = async () => {
-      const { data } = await supabase.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
+      const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
       if (data && data.data) applyCloud(data.data);
       else save();
       go(db.onboarded ? 'home' : 'onboard');
@@ -301,7 +301,7 @@
           authMsg = '';
           if (!email || !password) { authMsg = 'Enter email and password.'; render(); return; }
           $('goauth').textContent = 'Working…';
-          const fn = authMode==='signin' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
+          const fn = authMode==='signin' ? sb.auth.signInWithPassword : sb.auth.signUp;
           const { data, error } = await fn({ email, password });
           if (error) { authMsg = error.message; render(); return; }
           user = data.user || (data.session && data.session.user);
@@ -503,14 +503,14 @@
           ${legal}`;
         const so = $('signout');
         if (so) so.onclick = async () => {
-          await supabase.auth.signOut();
+          await sb.auth.signOut();
           user = null;
           go('auth');
         };
       }
     }
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await sb.auth.getSession();
       user = session && session.user;
       if (user) await afterLogin();
       else { screen = 'auth'; render(); }
