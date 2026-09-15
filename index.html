@@ -164,7 +164,7 @@
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
-    const PAY_LINK = 'https://buy.stripe.com/test_bJe6oBd0Z1Z8fJOaqJ8g000';
+    const PAY_LINK = 'https://buy.stripe.com/bJe6oBd0Z1Z8fJOaqJ8g000';
     const SUPABASE_URL = 'https://efmpsyvxzbkmwsypzbqs.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbXBzeXZ4emJrbXdzeXB6YnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2OTc2NzcsImV4cCI6MjEwMzI3MzY3N30.rDSquDFs-mMZT6XtBTtTrwJFe4t4hHORgDuwr_4xQzE';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -521,8 +521,8 @@
           <div class="card">
             <div class="label">Membership</div>
             <div class="value" style="font-size:17px">${db.paid ? 'Active' : 'Keep Muscle — $9 / month'}</div>
-            <div class="mini">${db.paid ? 'Cloud save and workout videos are included.' : 'Test checkout only. Use Stripe test card 4242 4242 4242 4242.'}</div>
-            ${db.paid ? '' : '<button id="upgrade" style="margin-top:12px">Upgrade</button><button id="markpaid" class="ghost">I finished the test checkout</button>'}
+            <div class="mini">${db.paid ? 'Cloud save and workout videos are included.' : 'Subscribe for $9 per month. After Stripe confirms payment, return here and tap I finished checkout.'}</div>
+            ${db.paid ? '' : '<button id="upgrade" style="margin-top:12px">Upgrade</button><button id="markpaid" class="ghost">I finished checkout</button>'}
           </div>
           <div class="card">
             <div class="label">Account</div>
