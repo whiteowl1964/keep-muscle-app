@@ -261,7 +261,18 @@
 
     let screen = 'auth';
     let step = 0;
-    const go = (s) => { screen=s; render(); };
+    const nextScreen = () => {
+      if (!db.onboarded) return 'onboard';
+      if (!db.paid) return 'pay';
+      return 'home';
+    };
+    const go = (s) => {
+      if (s === 'auth') { screen = 'auth'; render(); return; }
+      if (!db.onboarded) s = 'onboard';
+      else if (!db.paid && s !== 'pay') s = 'pay';
+      screen = s;
+      render();
+    };
     const afterLogin = async () => {
       const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
       if (data && data.data) applyCloud(data.data);
@@ -271,7 +282,7 @@
         if (history.replaceState) history.replaceState({}, '', location.pathname);
       }
       save();
-      go(db.onboarded ? 'home' : 'onboard');
+      go(nextScreen());
     };
     $('nav').addEventListener('click', e => {
       const b = e.target.closest('button'); if (b) go(b.dataset.go);
@@ -286,7 +297,7 @@
 
     function render(){
       const nav = $('nav');
-      nav.className = (screen==='onboard' || screen==='auth') ? 'hidden' : '';
+      nav.className = (screen==='onboard' || screen==='auth' || screen==='pay') ? 'hidden' : '';
       [...nav.querySelectorAll('button')].forEach(b => b.classList.toggle('on', b.dataset.go===screen));
       const el = $('app');
 
@@ -350,13 +361,44 @@
           <p class="lede">${f.d}</p>
           <div class="label">${f.l}</div>
           <input id="ob" value="${db[f.k]||''}" placeholder="${f.p}" />
-          <button id="next">${step===3?'Start tracking':'Continue'}</button>
+          <button id="next">${step===3?'Continue':'Continue'}</button>
           ${legal}`;
         $('next').onclick = () => {
           db[f.k] = $('ob').value || f.p;
           if (f.k==='proteinTarget') db.proteinTarget = parseInt(db[f.k])||150;
-          if (step===3){ db.onboarded=true; save(); go('home'); }
+          if (step===3){ db.onboarded=true; save(); go(nextScreen()); }
           else { step++; save(); render(); }
+        };
+        return;
+      }
+
+      if (screen==='pay') {
+        el.innerHTML = brand + `
+          <h1>Unlock Keep Muscle</h1>
+          <p class="lede">$9 per month. Workout videos, dose tracking, protein, check-ins, and cloud save on any phone.</p>
+          <div class="card">
+            <div class="label">Membership</div>
+            <div class="value" style="font-size:17px">$9 / month</div>
+            <div class="mini">Billed by Stripe to Prime Vitality LLC. Cancel anytime in your Stripe receipt email.</div>
+          </div>
+          <button id="upgrade">Subscribe — $9 / month</button>
+          <button class="ghost" id="markpaid">I finished checkout</button>
+          <button class="ghost" id="signout">Sign out</button>
+          ${legal}`;
+        const up = $('upgrade');
+        if (up) up.onclick = () => {
+          const email = user && user.email ? encodeURIComponent(user.email) : '';
+          location.href = PAY_LINK + (email ? ('?prefilled_email=' + email) : '');
+        };
+        const mp = $('markpaid');
+        if (mp) mp.onclick = () => { db.paid = true; save(); go('home'); };
+        const so = $('signout');
+        if (so) so.onclick = async () => {
+          await sb.auth.signOut();
+          user = null;
+          db.paid = false;
+          saveLocal();
+          go('auth');
         };
         return;
       }
