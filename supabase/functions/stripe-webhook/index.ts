@@ -1,8 +1,8 @@
 // Supabase Edge Function: stripe-webhook
 // Deploy: supabase functions deploy stripe-webhook --no-verify-jwt
-// Secrets (Dashboard > Edge Functions > Secrets):
-//   STRIPE_WEBHOOK_SECRET
-//   SUPABASE_SERVICE_ROLE_KEY
+// Secrets required (set in Dashboard > Edge Functions > Secrets, never in code):
+//   STRIPE_WEBHOOK_SECRET  — from Stripe Dashboard > Webhooks > your endpoint > Signing secret
+//   SERVICE_ROLE_KEY — from Supabase Settings > API Keys > service_role / secret
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -35,15 +35,20 @@ async function verifyStripe(raw: string, header: string | null, secret: string):
   return hex(signed) === v1;
 }
 
-async function findUserByEmail(sb: any, email: string): Promise<string | null> {
+async function findUserByEmail(sb: ReturnType<typeof createClient>, email: string): Promise<string | null> {
   if (!email) return null;
   const { data, error } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
   if (error || !data?.users) return null;
-  const hit = data.users.find((u: any) => (u.email || "").toLowerCase() === email.toLowerCase());
+  const hit = data.users.find((u) => (u.email || "").toLowerCase() === email.toLowerCase());
   return hit?.id || null;
 }
 
-async function setPaid(sb: any, userId: string, paid: boolean, extra: Record<string, unknown> = {}) {
+async function setPaid(
+  sb: ReturnType<typeof createClient>,
+  userId: string,
+  paid: boolean,
+  extra: Record<string, unknown> = {}
+) {
   const { data: row } = await sb.from("km_state").select("data").eq("user_id", userId).maybeSingle();
   const current = (row && row.data && typeof row.data === "object") ? row.data : {};
   const data = { ...current, ...extra, paid };
@@ -54,7 +59,9 @@ async function setPaid(sb: any, userId: string, paid: boolean, extra: Record<str
 }
 
 serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
 
   const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -63,8 +70,8 @@ serve(async (req) => {
     return new Response("Server missing STRIPE_WEBHOOK_SECRET", { status: 500 });
   }
   if (!serviceKey) {
-    console.error("Missing SUPABASE_SERVICE_ROLE_KEY");
-    return new Response("Server missing SUPABASE_SERVICE_ROLE_KEY", { status: 500 });
+    console.error("Missing SERVICE_ROLE_KEY");
+    return new Response("Server missing SERVICE_ROLE_KEY", { status: 500 });
   }
 
   const raw = await req.text();
@@ -76,7 +83,11 @@ serve(async (req) => {
   }
 
   let event: any;
-  try { event = JSON.parse(raw); } catch { return new Response("Bad JSON", { status: 400 }); }
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return new Response("Bad JSON", { status: 400 });
+  }
 
   const sb = createClient(SUPABASE_URL, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -89,6 +100,8 @@ serve(async (req) => {
   try {
     if (event.type === "checkout.session.completed") {
       const status = obj.payment_status || obj.status;
+      const subStatus = obj.subscription ? "paid" : status;
+      // Trialing and paid both count. Checkout completed with a subscription is enough.
       const counts = status === "paid" || status === "complete" || obj.mode === "subscription" || !!obj.subscription;
       if (counts) {
         userId = obj.client_reference_id || null;
@@ -112,7 +125,11 @@ serve(async (req) => {
     if (event.type === "charge.refunded") {
       const email = obj.billing_details?.email || obj.receipt_email || null;
       if (obj.customer) {
-        const { data: rows } = await sb.from("km_state").select("user_id").eq("data->>stripeCustomerId", obj.customer).limit(1);
+        const { data: rows } = await sb
+          .from("km_state")
+          .select("user_id")
+          .eq("data->>stripeCustomerId", obj.customer)
+          .limit(1);
         userId = rows?.[0]?.user_id || null;
       }
       if (!userId && email) userId = await findUserByEmail(sb, email);
@@ -126,7 +143,11 @@ serve(async (req) => {
 
     if (event.type === "customer.subscription.deleted") {
       if (obj.customer) {
-        const { data: rows } = await sb.from("km_state").select("user_id").eq("data->>stripeCustomerId", obj.customer).limit(1);
+        const { data: rows } = await sb
+          .from("km_state")
+          .select("user_id")
+          .eq("data->>stripeCustomerId", obj.customer)
+          .limit(1);
         userId = rows?.[0]?.user_id || null;
       }
       if (userId) {
@@ -137,13 +158,25 @@ serve(async (req) => {
       }
     }
 
-    console.log(JSON.stringify({ event_id: event.id, type: event.type, user_id: userId, outcome }));
+    console.log(JSON.stringify({
+      event_id: event.id,
+      type: event.type,
+      user_id: userId,
+      outcome,
+    }));
+
     return new Response(JSON.stringify({ received: true, outcome }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error(JSON.stringify({ event_id: event?.id, type: event?.type, user_id: userId, outcome: "error", error: String((err as any)?.message || err) }));
+    console.error(JSON.stringify({
+      event_id: event?.id,
+      type: event?.type,
+      user_id: userId,
+      outcome: "error",
+      error: String(err?.message || err),
+    }));
     return new Response("Handler error", { status: 500 });
   }
 });
