@@ -297,13 +297,16 @@
       render();
     };
     const afterLogin = async () => {
+      const params = new URLSearchParams(location.search);
+      const paidHint = params.get('paid') === '1';
+      if (paidHint && history.replaceState) {
+        history.replaceState({}, '', location.pathname);
+      }
       const { data } = await sb.from('km_state').select('data').eq('user_id', user.id).maybeSingle();
       if (data && data.data) applyCloud(data.data);
       else db.paid = false;
-      if (new URLSearchParams(location.search).get('paid') === '1') {
-        db.paid = true;
-        if (history.replaceState) history.replaceState({}, '', location.pathname);
-      }
+      // Never trust ?paid=1. Only the server row can unlock.
+      if (typeof db.paid !== 'boolean') db.paid = false;
       save();
       go(nextScreen());
     };
