@@ -64,7 +64,7 @@ serve(async (req) => {
   }
 
   const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey = Deno.env.get("SERVICE_ROLE_KEY");
   if (!secret) {
     console.error("Missing STRIPE_WEBHOOK_SECRET");
     return new Response("Server missing STRIPE_WEBHOOK_SECRET", { status: 500 });
