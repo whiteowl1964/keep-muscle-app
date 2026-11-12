@@ -420,19 +420,19 @@
       }
 
       if (screen==='pay') {
-        el.innerHTML = brand + `
-          <h1>Unlock Keep Muscle</h1>
-          <p class="lede">$9 per month. Workout videos, dose tracking, protein, check-ins, and cloud save on any phone.</p>
-          <div class="card">
-            <div class="label">Membership</div>
-            <div class="value" style="font-size:17px">$9 / month</div>
-            <div class="mini">Billed by Stripe to Prime Vitality LLC. Cancel anytime in your Stripe receipt email.</div>
-          </div>
-          <button id="upgrade">Subscribe — $9 / month</button>
-          <button class="ghost" id="checkpaid">I paid — check status</button>
-          <div class="err">${payMsg}</div>
-          <button class="ghost" id="signout">Sign out</button>
-          ${legal}`;
+      el.innerHTML = brand + `
+  <h1>Start your 7-day free trial</h1>
+  <p class="lede">No card required. Full access for 7 days. After the trial you can subscribe for $9/month to keep your data and videos.</p>
+  <div class="card">
+    <div class="label">Free trial</div>
+    <div class="value" style="font-size:17px">7 days free</div>
+    <div class="mini">No payment today. You’ll only be asked to subscribe if you want to continue after 7 days.</div>
+  </div>
+  <button id="upgrade">Start free trial</button>
+  <button class="ghost" id="checkpaid">I already subscribed</button>
+  <div class="err">${payMsg}</div>
+  <button class="ghost" id="signout">Sign out</button>
+  ${legal}`;
         const up = $('upgrade');
         if (up) up.onclick = () => { location.href = payUrl(); };
         const cp = $('checkpaid');
